@@ -2,7 +2,8 @@
 # Aidan's Map App 
 # Web App to highlight my favorite locations in DC, using Shiny for Python to display a map and table with filter options
 
-from shiny import App, render, ui
+
+from shiny import App, render, ui, reactive
 from shinywidgets import output_widget, render_widget
 import pandas as pd
 import mysql.connector
@@ -10,19 +11,17 @@ from ipyleaflet import Map, Marker, AwesomeIcon
 from ipywidgets import HTML
 import shinyswatch
 
-
-
-#Create connection to Amazon RDS database
+#create connection to Amazon RDS database
 conn = mysql.connector.connect(
         host="data-maps-1.czlrrfwauudc.us-east-2.rds.amazonaws.com",
         user="adminaidan",
         passwd="tac02zDAYS!"
         )
 
-#We're just grabbing the whole table, to be turned into a pandas DF. That DF will be manipulated for the filters
+#we're just grabbing the whole table, to be turned into a pandas DF. That DF will be manipulated for the filters
 stmt = "SELECT * FROM maps_db.dc_locations_tab"
 
-#Template for the html popup of the marker
+#remplate for the html popup of the marker
 html_temp="""
         <h3> {loc_name} </h3><br>
         Type: {loc_type}<br>
@@ -32,13 +31,14 @@ html_temp="""
         <i>{description}</i>
         """
 
-#Create pandas DF
+#create pandas DF
 df = pd.read_sql(stmt, con=conn)
 
 #just a list of the column names, for reference and maybe future use
 col_names = ['loc_name', 'city_name', 'loc_type', 'type_special', 'loc_address',
        'loc_vibe', 'loc_rating', 'latitude', 'longitude', 'loc_neighbor',
        'loc_tags', 'loc_descr']
+
 
 
 #This was my way of solving the issue with having commas separating tags in the csv file. Next iteration will have a separate table for tags as we discussed
@@ -62,7 +62,6 @@ def Filter_DF(filt_by, dataframe, col_name):
 #themes I enjoy:
 #cerulean, darkly, journal, sketchy, superhero, vapor
 
-
 #beginning of shiny framework
 #this creates the UI, and in order contains:
 # ui.page_fluid() - makes a fluid page that resizes to browser size
@@ -81,22 +80,21 @@ app_ui = ui.page_fluid(
     ui.input_radio_buttons(
         id="select_type", label="What are you looking for?", choices={"All": "All", "Bar": "Bar", "Food": "Food", "Activity": "Activity"}),
     ui.input_text("text_search", "Search locations", placeholder="Enter name, tags, etc."),
-    ui.hr(), 
-    output_widget("output_map"),
+    ui.hr(), #creates a little line on the page separating elements
+    output_widget("my_widget"),
     ui.hr(),
-    ui.output_table("out_table")
+    ui.output_table(id="out_table")
 )
-
 
 #this is the server section of the shiny app, where it reacts to inputs to render outputs.
 #inside we are only outputting two things, a map and a table
 
-def server(input, output):
+def server(input, output, session):
      
     #map output, done in a few steps. Eventually I want to clean this and make it into a a simple function above like Filter_DF
     @output
     @render_widget
-    def output_map():
+    def my_widget():
         #first, filter by the radio button input described above. All is the whole df, others use Filter_DF to filter by loc_type 
         #then filter by the search bar input, using the lambda function to search the whole row of the DF. this allows them to search by tags, address, name, etc
         if input.select_type() == "All":
@@ -163,6 +161,7 @@ def server(input, output):
 
     #table output, much simpler. Basically uses the same logic to filter the dataframe but drops certain information. 
     #Then renders the table to show what's displayed on the map
+
     @output
     @render.table
     def out_table():
@@ -179,6 +178,7 @@ def server(input, output):
         filtered_df.rename(columns={'loc_name': 'Name', 'loc_type': 'Type', 'loc_address': 'Address',
                                     'loc_rating': 'Rating', 'loc_descr': 'Description','loc_tags': 'Tags' }, inplace=True)
         return filtered_df
+
 
 
 #last part is connecting the server and UI, creating the app
